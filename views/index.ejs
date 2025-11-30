@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-zinc-900 text-white min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-md bg-zinc-800 p-8 rounded-xl shadow-xl">
+    <h3 class="text-3xl font-semibold mb-6 text-center">Create Account</h3>
+
+    <form action="/register" method="post" class="space-y-4">
+      <input class="w-full px-4 py-2 outline-none rounded-md bg-transparent border border-zinc-700 focus:border-blue-500" 
+             type="text" placeholder="Name" name="name">
+
+      <input class="w-full px-4 py-2 outline-none rounded-md bg-transparent border border-zinc-700 focus:border-blue-500" 
+             type="text" placeholder="Username" name="username">
+
+      <input class="w-full px-4 py-2 outline-none rounded-md bg-transparent border border-zinc-700 focus:border-blue-500" 
+             type="number" placeholder="Age" name="age">
+
+      <input class="w-full px-4 py-2 outline-none rounded-md bg-transparent border border-zinc-700 focus:border-blue-500" 
+             type="email" placeholder="Email" name="email">
+
+      <input class="w-full px-4 py-2 outline-none rounded-md bg-transparent border border-zinc-700 focus:border-blue-500" 
+             type="password" placeholder="Password" name="password">
+
+      <input class="w-full py-2 bg-blue-600 hover:bg-blue-700 cursor-pointer rounded-md font-medium"
+             type="submit" value="Create Account">
+
+        <p class="text-center text-sm text-zinc-400">
+        Already have an account?
+        <a href="/login" class="text-blue-500 hover:underline">Login here</a>     
+    </form>
+  </div>
+</body>
+
+</html>
