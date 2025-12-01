@@ -14,6 +14,8 @@ app.use(express.json());
 app.use(express.urlencoded({extended: true}));
 app.use(cookieParser());
 
+ const port = process.env.PORT || 4000;
+
 app.get('/', (req,res) =>{
 res.render("index");
 });
@@ -139,4 +141,6 @@ function isloggedIn(req, res, next){
 
 
 
-app.listen(3000); 
+app.listen(port, () => {
+  console.log("Server running on port", port);
+});
