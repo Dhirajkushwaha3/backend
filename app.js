@@ -1,146 +1,227 @@
-
+require('./models/User')
+require('./models/Post')
+require("dotenv").config();
 const express = require("express");
 const app = express();
-const userModel = require("./models/user");
-const postModel = require('./models/post');
+
+const userModel = require("./models/User");
+const postModel = require("./models/Post");
+
 const cookieParser = require("cookie-parser");
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
-const connectDB = require("./config/db.js");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const connectDB = require("./config/db");
+
+/* -------------------- ENV CHECK -------------------- */
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET missing in .env");
+}
+
+/* -------------------- DB -------------------- */
 connectDB();
 
+/* -------------------- MIDDLEWARE -------------------- */
 app.set("view engine", "ejs");
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
- const port = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET;
 
-app.get('/', (req,res) =>{
-res.render("index");
-});
+/* -------------------- AUTH MIDDLEWARE -------------------- */
+function isLoggedIn(req, res, next) {
+  try {
+    const token = req.cookies.token;
+    if (!token) return res.redirect("/login");
 
-app.get('/login', (req,res) =>{
-res.render("login");
-});
-
-app.get('/profile', isloggedIn, async (req,res) =>{
-  let user = await userModel.findOne({email: req.user.email}).populate("posts");
-  console.log(user.posts);
-  res.render("profile", {user});
-});
-
-app.get('/like/:id', isloggedIn, async (req,res) =>{
-  let post = await postModel.findOne({_id: req.params.id}).populate("user");
-if(post.likes.indexOf(req.user.userid) === -1){
-  post.likes.push(req.user.userid);
-}
-else{
-  post.likes.splice(post.likes.indexOf(req.user.userid), 1);
-}
-
- await post.save();
-  res.redirect("/profile");
-});
-
-app.get('/edit/:id', isloggedIn, async (req,res) =>{
-  let post = await postModel.findOne({_id: req.params.id}).populate("user");
-  res.render("edit", {post});
-});
-
-app.post('/update/:id', isloggedIn, async (req,res) =>{
-  let post = await postModel.findOneAndUpdate({_id: req.params.id}, {content: req.body.content})
-  res.redirect("/profile");
-});
-
-app.post('/delete/:id', isloggedIn, async (req, res) => {
-  const post = await postModel.findById(req.params.id);
-  if (!post) return res.status(404).send("Post not found");
-  if (post.user.toString() !== req.user.userid.toString()) {
-    return res.status(403).send("Unauthorized: You can't delete this post");
+    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log("Token Payload Content:", decoded);
+    req.user = decoded;
+    console.log("MiddleWare saved user:", req.user);
+    next();
+  } catch (err) {
+    res.redirect("/login");
   }
-  await postModel.findByIdAndDelete(req.params.id);
-  await userModel.updateOne(
-    { _id: req.user.userid },
-    { $pull: { posts: req.params.id } }
-  );
+}
+
+/* -------------------- ROUTES -------------------- */
+
+app.get("/", (req, res) => res.render("index"));
+app.get("/login", (req, res) => res.render("login"));
+
+/* -------------------- PROFILE -------------------- */
+app.get("/profile", isLoggedIn, async (req, res) => {
+  try {
+
+  
+    console.log("Full User Object from Middleware:", req.user);
+
+   if (!req.user || !req.user.userid) {
+      console.log("No userid found in request object");
+      return res.redirect("/login");
+    }
+    
+    
+    console.log("checking user id:", req.user.userid);
+    const user = await userModel
+      .findById(req.user.userid)
+      .populate("posts");
+
+    res.render("profile", { user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error" + err.message);
+  }
+});
+
+/* -------------------- CREATE POST -------------------- */
+app.post("/post", isLoggedIn, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content?.trim()) return res.redirect("/profile");
+
+    const post = await postModel.create({
+      user: req.user.userid,
+      content,
+    });
+
+    await userModel.findByIdAndUpdate(req.user.userid, {
+      $push: { posts: post._id },
+    });
+
+    res.redirect("/profile");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+/* -------------------- LIKE / UNLIKE -------------------- */
+app.post("/like/:id", isLoggedIn, async (req, res) => {
+  try {
+    const post = await postModel.findById(req.params.id);
+    if (!post) return res.redirect("/profile");
+
+    const userId = req.user.userid;
+    const index = post.likes.findIndex(
+      id => id.toString() === userId
+    );
+
+    if (index === -1) post.likes.push(userId);
+    else post.likes.splice(index, 1);
+
+    await post.save();
+    res.redirect("/profile");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+app.post("/update/:id", isLoggedIn, async (req, res) => {
+  const { content } = req.body;
+  await postModel.findByIdAndUpdate(req.params.id, { content });
   res.redirect("/profile");
 });
 
-
-
-
-app.post('/post', isloggedIn, async (req,res) =>{
-  let user = await userModel.findOne({email: req.user.email});
-  let {content} = req.body;
-  let post = await postModel.create({
-    user: user._id,
-    content
-  });
-  user.posts.push(post._id);
-  await user.save();
-  res.redirect("/profile");
+/* -------------------- edit -------------------- */
+app.get("/edit/:id", isLoggedIn, async (req, res) => {
+  const post = await postModel.findById(req.params.id);
+  res.render("edit", { post }); // Make sure you have edit.ejs in views folder
 });
 
-app.post('/register', async (req,res) =>
-  {
-   let {email, password, username, name, age} = req.body;
-   let user = await userModel.findOne({email});
-   if(user) return res.status(500).send("User already registered");
+/* -------------------- DELETE POST -------------------- */
+app.post("/delete/:id", isLoggedIn, async (req, res) => {
+  try {
+    // 1. Delete the post from the Post collection
+    await postModel.findOneAndDelete({ _id: req.params.id, user: req.user.userid });
 
-   bcrypt.genSalt(10, (err , salt) =>{
-   bcrypt.hash(password, salt, async (err, hash) =>{
-    let user = await userModel.create({
+    // 2. Remove the reference from the User's posts array
+    await userModel.findByIdAndUpdate(req.user.userid, {
+      $pull: { posts: req.params.id }
+    });
+
+    res.redirect("/profile");
+  } catch (err) {
+    res.status(500).send("Delete failed");
+  }
+});
+
+
+/* -------------------- REGISTER -------------------- */
+app.post("/register", async (req, res) => {
+  try {
+
+    console.log("Data received from form:", req.body);
+    const { username, name, email, age, password } = req.body;
+
+    if (!email || !password || password.length < 6) {
+      return res.status(400).send("Invalid input");
+    }
+
+    if (await userModel.findOne({ email })) {
+      return res.status(400).send("User already exists");
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = await userModel.create({
       username,
       name,
       email,
       age,
-      password: hash
-
+      password: hash,
     });
-    let token = jwt.sign({email: email, userid: user._id}, "shhhhh");
-   res.cookie("token", token);
-  res.redirect("/profile");
 
-   })
-   })
+    const token = jwt.sign(
+    { userid: user._id, email: user.email }, 
+  JWT_SECRET,
+  { expiresIn: "7d" }
+    );
 
-  });
-
-  app.post('/login', async (req,res) =>
-  {
-   let {email, password} = req.body;
-   let user = await userModel.findOne({email});
-   if(!user) return res.status(500).send("Something went wrong");
-
-   bcrypt.compare(password, user.password, (err, result) =>{
-    if(result){
-           let token = jwt.sign({email: email, userid: user._id}, "shhhhh");
-           res.cookie("token", token);
-           return res.status(200).redirect("/profile");
-    } 
-    else res.redirect("/login");
-   })
-  });
-
-app.get('/logout', (req,res) =>{
-  res.cookie("token", "")
-res.redirect("/login");
+    res.cookie("token", token, { httpOnly: true });
+    res.redirect("/profile");
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);
+    res.status(500).send(err.message);
+  }
 });
 
-function isloggedIn(req, res, next){
-  if(req.cookies.token === "") res.redirect("/login");
-  else{
-    let data = jwt.verify(req.cookies.token, "shhhhh");
-    req.user = data;
+/* -------------------- LOGIN -------------------- */
+app.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await userModel.findOne({ email });
+    if (!user) 
+      console.log("user not found in DB");
+      return res.status(400).send("Invalid credentials");
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).send("Invalid credentials");
+
+    const token = jwt.sign(
+      { userid: user._id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.cookie("token", token, { httpOnly: true });
+    res.redirect("/profile");
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    res.status(500).send(err.message);
   }
-  next();
-}
+});
 
+/* -------------------- LOGOUT -------------------- */
+app.get("/logout", (req, res) => {
+  res.clearCookie("token");
+  res.redirect("/login");
+});
 
-
-
-
-app.listen(port, () => {
-  console.log("Server running on port", port);
+/* -------------------- SERVER -------------------- */
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

@@ -1,25 +1,30 @@
-const { json } = require('body-parser');
-const { JsonWebTokenError } = require('jsonwebtoken');
-const mongoose = require('mongoose');
-const { type } = require('os');
-const { ref } = require('process');
+const mongoose = require("mongoose");
 
+const postSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
 
-const postSchema = mongoose.Schema({
-   user:{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "user",
+    content: {
+      type: String,
+      required: [true, "Post content is required"],
+      trim: true,
+      maxlength: [500, "Post content too long"]
+    },
+
+    likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      }
+    ]
   },
-  date: {
-    type: Date,
-    default: Date.now
-  },
-  content: String,
-  likes: [{
-    type: mongoose.Schema.Types.ObjectId, ref: "user"
-  }],
+  {
+    timestamps: true
+  }
+);
 
-    
-});
-
-module.exports = mongoose.model('post', postSchema);
+module.exports = mongoose.model("Post", postSchema);
