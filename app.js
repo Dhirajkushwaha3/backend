@@ -1,5 +1,4 @@
-require('./models/User')
-require('./models/Post')
+
 require("dotenv").config();
 const express = require("express");
 const app = express();
