@@ -34,11 +34,8 @@ function isLoggedIn(req, res, next) {
   try {
     const token = req.cookies.token;
     if (!token) return res.redirect("/login");
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    console.log("Token Payload Content:", decoded);
+    const decoded = jwt.verify(token, JWT_SECRET); 
     req.user = decoded;
-    console.log("MiddleWare saved user:", req.user);
     next();
   } catch (err) {
     res.redirect("/login");
@@ -54,16 +51,9 @@ app.get("/login", (req, res) => res.render("login"));
 app.get("/profile", isLoggedIn, async (req, res) => {
   try {
 
-  
-    console.log("Full User Object from Middleware:", req.user);
-
    if (!req.user || !req.user.userid) {
-      console.log("No userid found in request object");
       return res.redirect("/login");
     }
-    
-    
-    console.log("checking user id:", req.user.userid);
     const user = await userModel
       .findById(req.user.userid)
       .populate("posts");
@@ -121,23 +111,28 @@ app.post("/like/:id", isLoggedIn, async (req, res) => {
 
 app.post("/update/:id", isLoggedIn, async (req, res) => {
   const { content } = req.body;
-  await postModel.findByIdAndUpdate(req.params.id, { content });
+  await postModel.findByIdAndUpdate(
+    {_id: req.params.id, user: req.user.userid}, { content }
+  );
   res.redirect("/profile");
 });
 
 /* -------------------- edit -------------------- */
 app.get("/edit/:id", isLoggedIn, async (req, res) => {
   const post = await postModel.findById(req.params.id);
-  res.render("edit", { post }); // Make sure you have edit.ejs in views folder
+  if(!post || post.user.toString() !== req.user.userid){
+  return res.redirect("/profile"); 
+  }
+  res.render("edit", {post});
 });
 
 /* -------------------- DELETE POST -------------------- */
 app.post("/delete/:id", isLoggedIn, async (req, res) => {
   try {
-    // 1. Delete the post from the Post collection
+   
     await postModel.findOneAndDelete({ _id: req.params.id, user: req.user.userid });
 
-    // 2. Remove the reference from the User's posts array
+    
     await userModel.findByIdAndUpdate(req.user.userid, {
       $pull: { posts: req.params.id }
     });
@@ -194,10 +189,10 @@ app.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     const user = await userModel.findOne({ email });
-    if (!user) 
+    if (!user) {
       console.log("user not found in DB");
       return res.status(400).send("Invalid credentials");
-
+  }
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).send("Invalid credentials");
 
